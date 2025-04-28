@@ -3,6 +3,7 @@ NAME=mbw
 TARFILE=${NAME}.tar.gz
 
 mbw: mbw.c
+	gcc -Wall -o mbw mbw.c -lpapi
 
 clean:
 	rm -f mbw

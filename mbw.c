@@ -13,6 +13,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <papi.h>
+
 /* how many runs to average by default */
 #define DEFAULT_NR_LOOPS 10
 
@@ -191,6 +193,125 @@ int main(int argc, char **argv)
     double mt=0; /* MiBytes transferred == array size in MiB */
     int quiet=0; /* suppress extra messages */
 
+    /* launch PAPI with the topdown component and start measuring */
+    int retval;
+    int numcmp, cid, topdown_cid;
+	const PAPI_component_info_t *cmpinfo = NULL;
+	long long values[8];
+	int EventSet = PAPI_NULL;
+
+	retval=PAPI_library_init(PAPI_VER_CURRENT);
+	if (retval!=PAPI_VER_CURRENT) {
+		fprintf(stderr,"Error initializing PAPI! %s\n",
+		PAPI_strerror(retval));
+		return 1;
+    }
+
+	/* find the topdown component */
+	numcmp = PAPI_num_components();
+	for (cid = 0; cid < numcmp; cid++)
+	{
+		if ((cmpinfo = PAPI_get_component_info(cid)) == NULL)
+		{
+			printf("Failed to find topdown component\n");
+			return 1;
+		}
+		if (strstr(cmpinfo->name, "topdown"))
+		{
+			topdown_cid = cid;
+
+			/* check that the component is enabled */
+			if (cmpinfo->disabled)
+			{
+				printf("Topdown component is disabled: %s\n", cmpinfo->disabled_reason);
+				return 1;
+			}
+		}
+	}
+
+	/* ensure topdown component was found */
+	if (topdown_cid < 0)
+	{
+		printf("Topdown component not found\n");
+		return 1;
+	}
+
+	/* create EventSet */
+	retval = PAPI_create_eventset(&EventSet);
+	if (retval != PAPI_OK)
+	{
+		printf("failed to create eventset %d\n", retval);
+		return 1;
+	}
+
+    /* add level 1 topdown metrics */
+    retval = PAPI_add_named_event(EventSet, "TOPDOWN_RETIRING_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_BAD_SPEC_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_FE_BOUND_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_BE_BOUND_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+
+	/* add the level 2 topdown metrics */
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_HEAVY_OPS_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_LIGHT_OPS_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_BR_MISPREDICT_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_MACHINE_CLEARS_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_FETCH_LAT_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_FETCH_BAND_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_MEM_BOUND_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+	retval = PAPI_add_named_event(EventSet, "TOPDOWN_CORE_BOUND_PERC");
+	if (retval != PAPI_OK)
+	{
+		return 1;
+	}
+
+
+
+    PAPI_start(EventSet);
+
     tests[0]=0;
     tests[1]=0;
     tests[2]=0;
@@ -299,6 +420,26 @@ int main(int argc, char **argv)
 
     free(a);
     free(b);
+
+    /* report PAPI results */
+	PAPI_stop(EventSet, values);
+
+    printf("TMA metrics collected with the PAPI topdown component:\n");
+
+    printf("Retiring: %.2f%%\nBad spec: %.2f%%\nFrontend bound: %.2f%%\nBackend bound: %.2f%%\nHeavy ops: %.2f%%\nLight ops: %.2f%%\nBranch miss: %.2f%%\nMachine clears: %.2f%%\nFetch latency: %.2f%%\nFetch bandwidth %.2f%%\nMemory bound: %.2f%%\nCore bound: %.2f%%\n",
+        *((double *)(&values[0])),
+        *((double *)(&values[1])),
+        *((double *)(&values[2])),
+        *((double *)(&values[3])),
+        *((double *)(&values[4])),
+        *((double *)(&values[5])),
+        *((double *)(&values[6])),
+        *((double *)(&values[7])),
+        *((double *)(&values[8])),
+        *((double *)(&values[9])),
+        *((double *)(&values[10])),
+        *((double *)(&values[11])));
+
     return 0;
 }
 
